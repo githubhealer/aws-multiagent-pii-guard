@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PII Guard — Serverless Data Sanitization</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #111113;
+      --surface-elevated: #18181b;
+      --surface-hover: #1f1f23;
+      --border: rgba(255, 255, 255, 0.07);
+      --border-strong: rgba(255, 255, 255, 0.13);
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --accent: #fafafa;
+      --emerald: #10b981;
+      --emerald-dim: rgba(16, 185, 129, 0.12);
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, 0.12);
+      --sky: #38bdf8;
+      --sky-dim: rgba(56, 189, 248, 0.12);
+      --violet: #a78bfa;
+      --violet-dim: rgba(167, 139, 250, 0.12);
+      --rose: #f43f5e;
+      --rose-dim: rgba(244, 63, 94, 0.12);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+
+    /* Subtle Top Navigation */
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(9, 9, 11, 0.8);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--text);
+      color: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .brand-name {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-divider {
+      color: var(--border-strong);
+      font-weight: 300;
+    }
+
+    .brand-tag {
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }
+
+    .topbar-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+    }
+
+    /* Main Container */
+    .main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Minimal Surface Card */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    /* Upload Section */
+    .upload-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    @media (max-width: 900px) {
+      .upload-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .dropzone-area {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .dropzone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.01);
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+      text-align: center;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .dropzone input[type="file"] {
+      display: none;
+    }
+
+    .dropzone-icon {
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    .dropzone-title {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .dropzone-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .controls-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .samples {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .samples-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-right: 2px;
+    }
+
+    .chip-btn {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .chip-btn:hover {
+      color: var(--text);
+      border-color: var(--border-strong);
+      background: var(--surface-hover);
+    }
+
+    /* Right Side of Upload Panel: File + Action + Trace */
+    .execution-sidebar {
+      border-left: 1px solid var(--border);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    @media (max-width: 900px) {
+      .execution-sidebar {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .timer-badge {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+
+    .file-card {
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .file-info {
+      min-width: 0;
+    }
+
+    .file-name {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-meta {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Trace Steps */
+    .trace-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .trace-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12.5px;
+      color: var(--text-muted);
+      transition: color 0.15s ease;
+    }
+
+    .trace-step.active {
+      color: var(--text);
+    }
+
+    .trace-step.done {
+      color: var(--emerald);
+    }
+
+    .trace-step.error {
+      color: var(--rose);
+    }
+
+    .step-indicator {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--border-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      flex-shrink: 0;
+    }
+
+    .trace-step.active .step-indicator {
+      border-color: var(--text);
+      color: var(--text);
+    }
+
+    .trace-step.done .step-indicator {
+      border-color: var(--emerald);
+      background: var(--emerald-dim);
+      color: var(--emerald);
+    }
+
+    .trace-step.error .step-indicator {
+      border-color: var(--rose);
+      background: var(--rose-dim);
+      color: var(--rose);
+    }
+
+    .trace-label {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--text);
+      color: var(--bg);
+      width: 100%;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #e4e4e7;
+    }
+
+    .btn-outline {
+      background: var(--surface-elevated);
+      color: var(--text);
+      border-color: var(--border-strong);
+      height: 32px;
+      font-size: 12.5px;
+      padding: 0 12px;
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      background: var(--surface-hover);
+      border-color: var(--text-muted);
+    }
+
+    /* Status Strip */
+    .status-strip {
+      padding: 10px 28px;
+      font-size: 12.5px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface-elevated);
+    }
+
+    .status-strip.loading,
+    .status-strip.success,
+    .status-strip.error {
+      display: flex;
+    }
+
+    .status-strip.loading {
+      color: var(--text-secondary);
+    }
+
+    .status-strip.success {
+      color: var(--emerald);
+      background: rgba(16, 185, 129, 0.06);
+    }
+
+    .status-strip.error {
+      color: var(--rose);
+      background: rgba(244, 63, 94, 0.06);
+    }
+
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--text);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Metrics Strip */
+    .metrics-bar {
+      display: none;
+      grid-template-columns: repeat(4, 1fr);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .metrics-bar.visible {
+      display: grid;
+    }
+
+    @media (max-width: 768px) {
+      .metrics-bar {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .metric-cell {
+      padding: 16px 22px;
+      border-right: 1px solid var(--border);
+    }
+
+    .metric-cell:last-child {
+      border-right: none;
+    }
+
+    .metric-label {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .metric-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Data Grid Panel */
+    .grid-panel {
+      display: none;
+      flex-direction: column;
+    }
+
+    .grid-panel.visible {
+      display: flex;
+    }
+
+    .grid-toolbar {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .segmented {
+      display: inline-flex;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+
+    .seg-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 5px 12px;
+      border-radius: 4px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .seg-btn.active {
+      background: var(--surface-elevated);
+      color: var(--text);
+    }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toggle-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-pill input {
+      accent-color: var(--text);
+    }
+
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-wrap svg {
+      position: absolute;
+      left: 10px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      height: 32px;
+      width: 220px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0 12px 0 30px;
+      color: var(--text);
+      font-size: 12.5px;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .search-input:focus {
+      border-color: var(--text-secondary);
+    }
+
+    /* Table Viewport */
+    .table-container {
+      max-height: 600px;
+      overflow: auto;
+    }
+
+    .table-container::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .table-container::-webkit-scrollbar-track {
+      background: var(--surface);
+    }
+
+    .table-container::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 4px;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      text-align: left;
+      font-size: 12.5px;
+    }
+
+    table.data-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #141417;
+      color: var(--text-secondary);
+      font-weight: 500;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-strong);
+      border-right: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    table.data-table thead th:last-child,
+    table.data-table tbody td:last-child {
+      border-right: none;
+    }
+
+    table.data-table thead th.col-index {
+      width: 48px;
+      text-align: center;
+      color: var(--text-muted);
+      position: sticky;
+      left: 0;
+      z-index: 12;
+      background: #141417;
+    }
+
+    .th-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .col-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .col-badge.hashed {
+      background: var(--violet-dim);
+      color: var(--violet);
+    }
+
+    .col-badge.masked {
+      background: var(--amber-dim);
+      color: var(--amber);
+    }
+
+    .col-badge.scrubbed {
+      background: var(--sky-dim);
+      color: var(--sky);
+    }
+
+    .col-badge.kept {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    table.data-table tbody tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    table.data-table tbody td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      color: #e4e4e7;
+      vertical-align: top;
+      max-width: 440px;
+      overflow-wrap: break-word;
+    }
+
+    table.data-table tbody td.col-index {
+      text-align: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      background: var(--surface);
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      user-select: none;
+    }
+
+    /* Minimalist PII Tokens */
+    .token {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      padding: 1px 7px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .token.eml {
+      background: var(--sky-dim);
+      color: var(--sky);
+    }
+
+    .token.usr {
+      background: var(--violet-dim);
+      color: var(--violet);
+    }
+
+    .token.id {
+      background: var(--emerald-dim);
+      color: var(--emerald);
+    }
+
+    .token.masked {
+      background: var(--amber-dim);
+      color: var(--amber);
+    }
+
+    .token.formula {
+      background: var(--rose-dim);
+      color: var(--rose);
+    }
+
+    .raw-sub {
+      display: block;
+      margin-top: 3px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      text-decoration: line-through;
+    }
+
+    .grid-footer {
+      padding: 10px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .legend-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 2px;
+      margin-right: 5px;
+    }
+
+    .empty-row {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <span class="brand-name">PII Guard</span>
+      <span class="brand-divider">/</span>
+      <span class="brand-tag">Serverless Sanitization Pipeline</span>
+    </div>
+    <div class="topbar-meta">
+      <span class="status-indicator"><span class="dot"></span> us-east-1</span>
+      <span>Amazon Bedrock</span>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Unified Upload & Pipeline Panel -->
+    <section class="panel">
+      <div class="upload-layout">
+        <!-- Left: Dropzone & Sample Datasets -->
+        <div class="dropzone-area">
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" />
+            <svg class="dropzone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <div class="dropzone-title">Drop a CSV file here, or click to browse</div>
+            <div class="dropzone-sub">Uploaded directly to S3 via presigned PUT URL</div>
+          </div>
+
+          <div class="controls-footer">
+            <div class="samples">
+              <span class="samples-label">Presets:</span>
+              <button type="button" class="chip-btn" data-sample="bank_transactions.csv">bank_transactions.csv</button>
+              <button type="button" class="chip-btn" data-sample="customer_support_tickets.csv">customer_support_tickets.csv</button>
+              <button type="button" class="chip-btn" data-sample="edge_cases.csv">edge_cases.csv</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Active File, Execution Steps & Action Button -->
+        <div class="execution-sidebar">
+          <div>
+            <div class="sidebar-header">
+              <span class="sidebar-title">Pipeline Execution</span>
+              <span class="timer-badge" id="elapsedTimerPill">0.0s</span>
+            </div>
+
+            <div class="file-card" style="margin-top: 12px;">
+              <div class="file-info">
+                <div class="file-name" id="selectedFileName">No file selected</div>
+                <div class="file-meta" id="selectedFileMeta">Select or drop a .csv file to begin</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="trace-list">
+            <div class="trace-step" id="step1">
+              <span class="step-indicator">1</span>
+              <span class="trace-label" id="step1Desc">Generate presigned S3 URLs</span>
+            </div>
+            <div class="trace-step" id="step2">
+              <span class="step-indicator">2</span>
+              <span class="trace-label" id="step2Desc">Upload raw CSV to S3 Raw Zone</span>
+            </div>
+            <div class="trace-step" id="step3">
+              <span class="step-indicator">3</span>
+              <span class="trace-label" id="step3Desc">Scrub PII with Amazon Bedrock</span>
+            </div>
+          </div>
+
+          <button id="runPipelineBtn" class="btn btn-primary" disabled>
+            Sanitize Dataset
+          </button>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <div class="status-strip" id="statusBanner">
+        <div class="status-left">
+          <div class="spinner" id="statusSpinner"></div>
+          <span id="statusText">Ready</span>
+        </div>
+        <span id="statusRightMeta" style="font-family: var(--font-mono); font-size: 11.5px;"></span>
+      </div>
+    </section>
+
+    <!-- Minimalist KPI Bar -->
+    <section class="metrics-bar" id="kpiGrid">
+      <div class="metric-cell">
+        <div class="metric-label">Total Rows</div>
+        <div class="metric-value" id="kpiRows">0</div>
+        <div class="metric-sub">Verified row parity</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Columns</div>
+        <div class="metric-value" id="kpiCols">0</div>
+        <div class="metric-sub" id="kpiProtectedCols">0 sanitized</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Transformed Cells</div>
+        <div class="metric-value" id="kpiCells">0</div>
+        <div class="metric-sub">HMAC-SHA256 & masks</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">Clean Zone Object</div>
+        <div class="metric-value" style="color: var(--emerald); font-size: 14px;">PASS</div>
+        <div class="metric-sub" id="kpiCleanKey">—</div>
+      </div>
+    </section>
+
+    <!-- Full Dataset Grid -->
+    <section class="panel grid-panel" id="workspaceCard">
+      <div class="grid-toolbar">
+        <div class="segmented">
+          <button type="button" class="seg-btn active" id="tabCleanBtn">Sanitized Output</button>
+          <button type="button" class="seg-btn" id="tabRawBtn">Original Input</button>
+        </div>
+
+        <div class="toolbar-right">
+          <label class="toggle-pill" id="diffToggleWrap">
+            <input type="checkbox" id="showInlineDiffCheckbox" />
+            Compare raw
+          </label>
+
+          <label class="toggle-pill">
+            <input type="checkbox" id="onlyScrubbedRowsCheckbox" />
+            Modified rows only
+          </label>
+
+          <div class="search-wrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="tableSearchInput" class="search-input" placeholder="Filter rows..." />
+          </div>
+
+          <button type="button" class="btn btn-outline" id="downloadCsvBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            CSV
+          </button>
+
+          <button type="button" class="btn btn-outline" id="downloadXlsxBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+            </svg>
+            Excel (.xlsx)
+          </button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table" id="dataGrid">
+          <thead id="gridHead"></thead>
+          <tbody id="gridBody"></tbody>
+        </table>
+      </div>
+
+      <div class="grid-footer">
+        <div class="legend">
+          <span><span class="legend-dot" style="background: var(--sky);"></span>Email HMAC</span>
+          <span><span class="legend-dot" style="background: var(--violet);"></span>Person HMAC</span>
+          <span><span class="legend-dot" style="background: var(--emerald);"></span>ID / Card HMAC</span>
+          <span><span class="legend-dot" style="background: var(--amber);"></span>Last-4 Mask</span>
+        </div>
+        <span id="rowCountSummary">0 rows</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const LAMBDA_FUNCTION_URL = "https://banyrfvgpaw46andbhwn6gdbcu0ieruf.lambda-url.us-east-1.on.aws/";
+
+    const SAMPLE_DATASETS = {
+      "bank_transactions.csv":
+        "transaction_id,customer_email,amount,transaction_date\n" +
+        "TX-001,alice@example.com,-10.50,2026-01-03\n" +
+        "TX-002,bob@example.com,250.00,2026-01-04\n",
+      "customer_support_tickets.csv":
+        "ticket_id,customer_name,email,comment\n" +
+        "T-001,Asha Rao,asha@example.com,\"Please call me at +919876543210.\"\n" +
+        "T-002,Rahul Das,rahul@example.com,\"My card was declined.\"\n",
+      "edge_cases.csv":
+        "record_id,notes,amount\n" +
+        "1,\"quoted, multiline note\",-42.5\n" +
+        "2,\"=SUM(A1:A2)\",100\n"
+    };
+
+    const MAX_PREVIEW_ROWS = 500;
+
+    let currentFile = null;
+    let rawCsvText = "";
+    let cleanCsvText = "";
+    let rawParsed = { headers: [], rows: [] };
+    let cleanParsed = { headers: [], rows: [] };
+    let activeTab = "clean";
+    let cleanKeyName = "";
+    let currentDownloadUrl = "";
+
+    const dropzone = document.getElementById("dropzone");
+    const csvFileInput = document.getElementById("csvFileInput");
+    const selectedFileName = document.getElementById("selectedFileName");
+    const selectedFileMeta = document.getElementById("selectedFileMeta");
+    const runPipelineBtn = document.getElementById("runPipelineBtn");
+    const statusBanner = document.getElementById("statusBanner");
+    const statusSpinner = document.getElementById("statusSpinner");
+    const statusText = document.getElementById("statusText");
+    const statusRightMeta = document.getElementById("statusRightMeta");
+    const elapsedTimerPill = document.getElementById("elapsedTimerPill");
+
+    const step1 = document.getElementById("step1");
+    const step2 = document.getElementById("step2");
+    const step3 = document.getElementById("step3");
+    const step1Desc = document.getElementById("step1Desc");
+    const step2Desc = document.getElementById("step2Desc");
+    const step3Desc = document.getElementById("step3Desc");
+
+    const kpiGrid = document.getElementById("kpiGrid");
+    const kpiRows = document.getElementById("kpiRows");
+    const kpiCols = document.getElementById("kpiCols");
+    const kpiProtectedCols = document.getElementById("kpiProtectedCols");
+    const kpiCells = document.getElementById("kpiCells");
+    const kpiCleanKey = document.getElementById("kpiCleanKey");
+
+    const workspaceCard = document.getElementById("workspaceCard");
+    const tabCleanBtn = document.getElementById("tabCleanBtn");
+    const tabRawBtn = document.getElementById("tabRawBtn");
+    const showInlineDiffCheckbox = document.getElementById("showInlineDiffCheckbox");
+    const onlyScrubbedRowsCheckbox = document.getElementById("onlyScrubbedRowsCheckbox");
+    const diffToggleWrap = document.getElementById("diffToggleWrap");
+    const tableSearchInput = document.getElementById("tableSearchInput");
+    const downloadCsvBtn = document.getElementById("downloadCsvBtn");
+    const downloadXlsxBtn = document.getElementById("downloadXlsxBtn");
+    const gridHead = document.getElementById("gridHead");
+    const gridBody = document.getElementById("gridBody");
+    const rowCountSummary = document.getElementById("rowCountSummary");
+
+    // RFC 4180 CSV Parser
+    function parseCSV(text) {
+      const cleaned = (text || "").replace(/^\uFEFF/, "");
+      if (!cleaned.trim()) return { headers: [], rows: [] };
+
+      const records = [];
+      let row = [];
+      let field = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        const next = cleaned[i + 1];
+
+        if (inQuotes) {
+          if (ch === '"' && next === '"') {
+            field += '"';
+            i++;
+          } else if (ch === '"') {
+            inQuotes = false;
+          } else {
+            field += ch;
+          }
+        } else {
+          if (ch === '"') {
+            inQuotes = true;
+          } else if (ch === ",") {
+            row.push(field);
+            field = "";
+          } else if (ch === "\r" && next === "\n") {
+            row.push(field);
+            records.push(row);
+            row = [];
+            field = "";
+            i++;
+          } else if (ch === "\n" || ch === "\r") {
+            row.push(field);
+            records.push(row);
+            row = [];
+            field = "";
+          } else {
+            field += ch;
+          }
+        }
+      }
+
+      if (field.length > 0 || row.length > 0) {
+        row.push(field);
+        records.push(row);
+      }
+
+      if (records.length === 0) return { headers: [], rows: [] };
+      const headers = records[0];
+      const rows = records.slice(1).filter((r) => !(r.length === 1 && r[0] === ""));
+      return { headers, rows };
+    }
+
+    // File Selection
+    async function selectFile(file) {
+      if (!file) return;
+      currentFile = file;
+      rawCsvText = await file.text();
+      rawParsed = parseCSV(rawCsvText);
+
+      selectedFileName.textContent = file.name;
+      selectedFileMeta.textContent = `${(file.size / 1024).toFixed(1)} KB · ${rawParsed.rows.length.toLocaleString()} rows · ${rawParsed.headers.length} columns`;
+      runPipelineBtn.disabled = false;
+    }
+
+    dropzone.addEventListener("click", () => csvFileInput.click());
+
+    csvFileInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) {
+        selectFile(e.target.files[0]);
+      }
+    });
+
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("dragover");
+    });
+
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        selectFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    document.querySelectorAll(".chip-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const name = btn.getAttribute("data-sample");
+        const content = SAMPLE_DATASETS[name];
+        if (!content) return;
+        const file = new File([content], name, { type: "text/csv" });
+        selectFile(file);
+      });
+    });
+
+    function resetSteps() {
+      [step1, step2, step3].forEach((el) => el.classList.remove("active", "done", "error"));
+      step1Desc.textContent = "Generate presigned S3 URLs";
+      step2Desc.textContent = "Upload raw CSV to S3 Raw Zone";
+      step3Desc.textContent = "Scrub PII with Amazon Bedrock";
+    }
+
+    function setBanner(mode, message, rightMeta = "") {
+      statusBanner.className = `status-strip ${mode}`;
+      statusSpinner.style.display = mode === "loading" ? "block" : "none";
+      statusText.textContent = message;
+      statusRightMeta.textContent = rightMeta;
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Execute 3-Step AWS Serverless Pipeline
+    runPipelineBtn.addEventListener("click", async () => {
+      if (!currentFile) return;
+
+      runPipelineBtn.disabled = true;
+      resetSteps();
+
+      const startTime = performance.now();
+      const timerInterval = setInterval(() => {
+        elapsedTimerPill.textContent = `${((performance.now() - startTime) / 1000).toFixed(1)}s`;
+      }, 100);
+
+      let currentStage = 1;
+
+      try {
+        // Step 1: Request Presigned URLs
+        step1.classList.add("active");
+        setBanner("loading", "Requesting presigned S3 URLs...", "Step 1 of 3");
+
+        const presignRes = await fetch(LAMBDA_FUNCTION_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: currentFile.name })
+        });
+
+        if (!presignRes.ok) {
+          throw new Error(`Presign request failed (HTTP ${presignRes.status})`);
+        }
+
+        const { upload_url, download_url, clean_key } = await presignRes.json();
+        if (!upload_url || !download_url) {
+          throw new Error("Invalid presign payload from Lambda Function URL");
+        }
+
+        cleanKeyName = clean_key || `transactions/${currentFile.name}`;
+        currentDownloadUrl = download_url;
+        step1.classList.replace("active", "done");
+        step1Desc.textContent = `Signed (${cleanKeyName})`;
+
+        // Step 2: Direct PUT to S3 Raw Zone
+        currentStage = 2;
+        step2.classList.add("active");
+        setBanner("loading", "Uploading CSV to S3 Raw Zone...", "Step 2 of 3");
+
+        const uploadRes = await fetch(upload_url, {
+          method: "PUT",
+          headers: { "Content-Type": "text/csv" },
+          body: currentFile
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error(`S3 upload returned HTTP ${uploadRes.status}`);
+        }
+
+        step2.classList.replace("active", "done");
+        step2Desc.textContent = `Uploaded ${(currentFile.size / 1024).toFixed(1)} KB to S3`;
+
+        // Step 3: Poll S3 Clean Zone
+        currentStage = 3;
+        step3.classList.add("active");
+        setBanner("loading", "Scrubbing PII with Amazon Bedrock...", "Polling S3 Clean Zone");
+
+        const maxAttempts = 600;
+        let downloadedText = null;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          statusRightMeta.textContent = `Poll ${attempt}/${maxAttempts}`;
+          const pollRes = await fetch(download_url, { method: "GET", cache: "no-store" });
+
+          if (pollRes.status === 200) {
+            downloadedText = await pollRes.text();
+            break;
+          }
+
+          if (pollRes.status !== 404 && pollRes.status !== 403) {
+            throw new Error(`S3 Clean Zone returned HTTP ${pollRes.status}`);
+          }
+
+          await sleep(1500);
+        }
+
+        if (downloadedText === null) {
+          throw new Error("Timed out after 2 mins waiting for scrubbed output in S3 Clean Zone");
+        }
+
+        cleanCsvText = downloadedText;
+        cleanParsed = parseCSV(cleanCsvText);
+
+        step3.classList.replace("active", "done");
+        const totalSecs = ((performance.now() - startTime) / 1000).toFixed(2);
+        step3Desc.textContent = `Sanitized ${cleanParsed.rows.length.toLocaleString()} rows`;
+        setBanner("success", "Sanitization and independent audit complete", `${totalSecs}s`);
+
+        renderDatasetWorkspace();
+      } catch (err) {
+        [step1, step2, step3].forEach((s) => {
+          if (s.classList.contains("active")) s.classList.replace("active", "error");
+        });
+        let msg = err.message || "Pipeline execution failed";
+        if (msg === "Failed to fetch" && currentStage === 2) {
+          msg = "S3 PUT blocked by browser CORS policy on pii-guard-raw-zone-sg23 (ensure S3 Bucket CORS allows PUT & GET from *)";
+        } else if (msg === "Failed to fetch" && currentStage === 3) {
+          msg = "S3 GET blocked by browser CORS policy on pii-guard-clean-zone-sg23 (ensure S3 Bucket CORS allows GET from *)";
+        }
+        setBanner("error", msg, `Failed at Step ${currentStage}`);
+      } finally {
+        clearInterval(timerInterval);
+        runPipelineBtn.disabled = false;
+      }
+    });
+
+    // Visual PII Highlighting & Grid Rendering
+    const TOKEN_EXACT_REGEX = /^(usr|eml|pan|uid|crd|phn|ip|prs|org|loc)_v[0-9A-Za-z]+_[0-9a-f]{24}$/i;
+    const MASK_EXACT_REGEX = /^\*{3}\d{0,4}$/;
+    const INLINE_PII_SPLIT_REGEX = /(\b(?:usr|eml|pan|uid|crd|phn|ip|prs|org|loc)_v[0-9A-Za-z]+_[0-9a-f]{24}\b|\*{3}\d{4})/gi;
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function getTokenClass(token) {
+      const prefix = token.slice(0, 3).toLowerCase();
+      if (prefix === "eml") return "eml";
+      if (prefix === "usr" || prefix === "prs" || prefix === "org" || prefix === "loc") return "usr";
+      return "id";
+    }
+
+    function formatCellHtml(cellValue, rawCellValue, isCleanMode, showDiff) {
+      const val = cellValue ?? "";
+      if (!isCleanMode) return escapeHtml(val);
+
+      let html = "";
+      const trimmed = val.trim();
+
+      if (TOKEN_EXACT_REGEX.test(trimmed)) {
+        html = `<span class="token ${getTokenClass(trimmed)}">${escapeHtml(trimmed)}</span>`;
+      } else if (MASK_EXACT_REGEX.test(trimmed)) {
+        html = `<span class="token masked">${escapeHtml(trimmed)}</span>`;
+      } else if (val.startsWith("'") && ["=", "+", "-", "@"].includes(val[1])) {
+        html = `<span class="token formula">${escapeHtml(val)}</span>`;
+      } else if (INLINE_PII_SPLIT_REGEX.test(val)) {
+        INLINE_PII_SPLIT_REGEX.lastIndex = 0;
+        html = val
+          .split(INLINE_PII_SPLIT_REGEX)
+          .map((part) => {
+            if (TOKEN_EXACT_REGEX.test(part)) {
+              return `<span class="token ${getTokenClass(part)}">${escapeHtml(part)}</span>`;
+            }
+            if (MASK_EXACT_REGEX.test(part)) {
+              return `<span class="token masked">${escapeHtml(part)}</span>`;
+            }
+            return escapeHtml(part);
+          })
+          .join("");
+      } else {
+        html = escapeHtml(val);
+      }
+
+      if (showDiff && rawCellValue !== undefined && rawCellValue !== val) {
+        html += `<span class="raw-sub">${escapeHtml(rawCellValue)}</span>`;
+      }
+
+      return html;
+    }
+
+    function detectColumnAction(colIdx) {
+      let hasHash = false;
+      let hasMask = false;
+      let hasScrub = false;
+
+      for (let r = 0; r < cleanParsed.rows.length; r++) {
+        const val = (cleanParsed.rows[r][colIdx] || "").trim();
+        const rawVal = (rawParsed.rows[r]?.[colIdx] || "").trim();
+        if (!val || val === rawVal) continue;
+
+        if (TOKEN_EXACT_REGEX.test(val)) hasHash = true;
+        else if (MASK_EXACT_REGEX.test(val)) hasMask = true;
+        else hasScrub = true;
+      }
+
+      if (hasHash && !hasScrub) return { label: "HASH", cls: "hashed" };
+      if (hasMask && !hasScrub) return { label: "MASK", cls: "masked" };
+      if (hasScrub) return { label: "SCRUB", cls: "scrubbed" };
+      return { label: "KEEP", cls: "kept" };
+    }
+
+    function renderDatasetWorkspace() {
+      let changedCellsCount = 0;
+      let protectedColsCount = 0;
+
+      const colActions = cleanParsed.headers.map((_, colIdx) => {
+        const info = detectColumnAction(colIdx);
+        if (info.cls !== "kept") protectedColsCount++;
+        return info;
+      });
+
+      for (let r = 0; r < cleanParsed.rows.length; r++) {
+        const cleanRow = cleanParsed.rows[r];
+        const rawRow = rawParsed.rows[r] || [];
+        for (let c = 0; c < cleanParsed.headers.length; c++) {
+          if ((cleanRow[c] ?? "") !== (rawRow[c] ?? "")) changedCellsCount++;
+        }
+      }
+
+      kpiRows.textContent = cleanParsed.rows.length.toLocaleString();
+      kpiCols.textContent = cleanParsed.headers.length.toLocaleString();
+      kpiProtectedCols.textContent = `${protectedColsCount} of ${cleanParsed.headers.length} columns sanitized`;
+      kpiCells.textContent = changedCellsCount.toLocaleString();
+      kpiCleanKey.textContent = cleanKeyName;
+
+      kpiGrid.classList.add("visible");
+      workspaceCard.classList.add("visible");
+
+      renderGridTable(colActions);
+    }
+
+    function renderGridTable(cachedColActions) {
+      const dataset = activeTab === "clean" ? cleanParsed : rawParsed;
+      const isCleanMode = activeTab === "clean";
+      const showDiff = isCleanMode && showInlineDiffCheckbox.checked;
+      const onlyChanged = onlyScrubbedRowsCheckbox.checked;
+      const query = tableSearchInput.value.trim().toLowerCase();
+
+      diffToggleWrap.style.opacity = isCleanMode ? "1" : "0.4";
+      showInlineDiffCheckbox.disabled = !isCleanMode;
+
+      const colActions = cachedColActions || cleanParsed.headers.map((_, idx) => detectColumnAction(idx));
+
+      let headHtml = `<tr><th class="col-index">#</th>`;
+      dataset.headers.forEach((h, idx) => {
+        const tag = isCleanMode && colActions[idx]
+          ? `<span class="col-badge ${colActions[idx].cls}">${colActions[idx].label}</span>`
+          : "";
+        headHtml += `<th><div class="th-inner"><span>${escapeHtml(h)}</span>${tag}</div></th>`;
+      });
+      headHtml += `</tr>`;
+      gridHead.innerHTML = headHtml;
+
+      const bodyChunks = [];
+      let matchedCount = 0;
+
+      for (let r = 0; r < dataset.rows.length; r++) {
+        const row = dataset.rows[r];
+        const cleanRow = cleanParsed.rows[r] || [];
+        const rawRow = rawParsed.rows[r] || [];
+
+        if (onlyChanged) {
+          const rowChanged = cleanRow.some((val, c) => (val ?? "") !== (rawRow[c] ?? ""));
+          if (!rowChanged) continue;
+        }
+
+        if (query) {
+          const matchesQuery = row.some((cell) => String(cell).toLowerCase().includes(query)) ||
+            String(r + 1).includes(query);
+          if (!matchesQuery) continue;
+        }
+
+        matchedCount++;
+        if (bodyChunks.length < MAX_PREVIEW_ROWS) {
+          let tr = `<tr><td class="col-index">${r + 1}</td>`;
+          for (let c = 0; c < dataset.headers.length; c++) {
+            tr += `<td>${formatCellHtml(row[c], rawRow[c], isCleanMode, showDiff)}</td>`;
+          }
+          tr += `</tr>`;
+          bodyChunks.push(tr);
+        }
+      }
+
+      if (bodyChunks.length === 0) {
+        gridBody.innerHTML = `<tr><td colspan="${dataset.headers.length + 1}" class="empty-row">No matching rows found</td></tr>`;
+      } else {
+        gridBody.innerHTML = bodyChunks.join("");
+      }
+
+      if (matchedCount > MAX_PREVIEW_ROWS) {
+        rowCountSummary.textContent = `Showing first ${MAX_PREVIEW_ROWS.toLocaleString()} of ${matchedCount.toLocaleString()} rows (download CSV for full dataset)`;
+      } else {
+        rowCountSummary.textContent = `${matchedCount.toLocaleString()} of ${dataset.rows.length.toLocaleString()} rows`;
+      }
+    }
+
+    tabCleanBtn.addEventListener("click", () => {
+      activeTab = "clean";
+      tabCleanBtn.classList.add("active");
+      tabRawBtn.classList.remove("active");
+      renderGridTable();
+    });
+
+    tabRawBtn.addEventListener("click", () => {
+      activeTab = "raw";
+      tabRawBtn.classList.add("active");
+      tabCleanBtn.classList.remove("active");
+      renderGridTable();
+    });
+
+    showInlineDiffCheckbox.addEventListener("change", () => renderGridTable());
+    onlyScrubbedRowsCheckbox.addEventListener("change", () => renderGridTable());
+    tableSearchInput.addEventListener("input", () => renderGridTable());
+
+    function getCleanStem() {
+      const base = currentFile ? currentFile.name.replace(/\.csv$/i, "") : "dataset";
+      return `${base}_clean`;
+    }
+
+    downloadCsvBtn.addEventListener("click", () => {
+      if (currentDownloadUrl) {
+        const a = document.createElement("a");
+        a.href = currentDownloadUrl;
+        a.download = `${getCleanStem()}.csv`;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+      if (!cleanCsvText) return;
+      const blob = new Blob(["\uFEFF" + cleanCsvText], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${getCleanStem()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    downloadXlsxBtn.addEventListener("click", () => {
+      if (!cleanParsed.headers.length) return;
+      if (typeof XLSX === "undefined") {
+        downloadCsvBtn.click();
+        return;
+      }
+
+      const aoa = [cleanParsed.headers, ...cleanParsed.rows];
+      const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+      worksheet["!cols"] = cleanParsed.headers.map((header, colIdx) => {
+        let maxLen = header.length;
+        for (let r = 0; r < Math.min(cleanParsed.rows.length, 200); r++) {
+          const cellLen = String(cleanParsed.rows[r][colIdx] || "").length;
+          if (cellLen > maxLen) maxLen = cellLen;
+        }
+        return { wch: Math.min(Math.max(maxLen + 3, 12), 55) };
+      });
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sanitized_Data");
+      XLSX.writeFile(workbook, `${getCleanStem()}.xlsx`);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# Python bytecode & virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts & deployment archives
+build/
+dist/
+*.zip
+
+# Large benchmark datasets (>35 MB)
+datasets/pii_dataset.csv
+
+# Local agent/IDE scratchpads
+.agents/
+.agent/
+.vscode/
+.idea/

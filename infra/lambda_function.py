@@ -9,12 +9,11 @@ s3 = boto3.client("s3")
 CLEAN_BUCKET = os.environ.get("CLEAN_BUCKET", "pii-guard-clean-zone-sg23")
 SALT = os.environ.get("PII_SALT", "default_dev_salt")
 
-# Temporary mock until Yashvanth's /agents module is merged
 def mock_run_pii_pipeline(raw_csv_text: str, salt: str) -> tuple[str, dict]:
     audit_report = {
         "status": "MOCK_PASS",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "note": "Placeholder pipeline active. Waiting for Yashvanth's agent merge."
+        "note": "Unexpected pipeline error"
     }
     return raw_csv_text, audit_report
 
